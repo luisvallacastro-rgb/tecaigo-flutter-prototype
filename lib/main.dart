@@ -15,7 +15,45 @@ void main() {
       systemNavigationBarIconBrightness: Brightness.light,
     ),
   );
-  runApp(const TeCaiGoApp());
+  runApp(const DesktopPrototypeHost(child: TeCaiGoApp()));
+}
+
+class DesktopPrototypeHost extends StatelessWidget {
+  const DesktopPrototypeHost({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final framed = constraints.maxWidth >= 720;
+        if (!framed) return child;
+        final height = constraints.maxHeight.clamp(720, 932).toDouble();
+        return ColoredBox(
+          color: AppColors.canvasDeep,
+          child: Center(
+            child: SizedBox(
+              width: 430,
+              height: height,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(30),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: AppColors.canvas,
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.12),
+                    ),
+                  ),
+                  child: child,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
 }
 
 class TeCaiGoApp extends StatelessWidget {
@@ -88,59 +126,12 @@ class TeCaiGoApp extends StatelessWidget {
       ),
       builder: (context, child) {
         final media = MediaQuery.of(context);
-        return MobilePrototypeFrame(
-          media: media.copyWith(textScaler: const TextScaler.linear(1)),
+        return MediaQuery(
+          data: media.copyWith(textScaler: const TextScaler.linear(1)),
           child: child ?? const SizedBox.shrink(),
         );
       },
       home: const AuthGate(),
-    );
-  }
-}
-
-class MobilePrototypeFrame extends StatelessWidget {
-  const MobilePrototypeFrame({
-    super.key,
-    required this.media,
-    required this.child,
-  });
-
-  final MediaQueryData media;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final screen = media.size;
-    final framed = screen.width >= 720;
-    final frameSize =
-        framed ? Size(430, screen.height.clamp(720, 932).toDouble()) : screen;
-    final framedMedia = media.copyWith(size: frameSize);
-    final app = MediaQuery(data: framedMedia, child: child);
-
-    if (!framed) return app;
-
-    return ColoredBox(
-      color: AppColors.canvasDeep,
-      child: Center(
-        child: Container(
-          width: frameSize.width,
-          height: frameSize.height,
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            color: AppColors.canvas,
-            borderRadius: BorderRadius.circular(30),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.45),
-                blurRadius: 44,
-                offset: const Offset(0, 22),
-              ),
-            ],
-          ),
-          child: app,
-        ),
-      ),
     );
   }
 }
