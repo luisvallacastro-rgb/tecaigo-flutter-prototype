@@ -27,7 +27,7 @@ class DesktopPrototypeHost extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final framed = constraints.maxWidth >= 720;
+        final framed = constraints.maxWidth >= 480;
         if (!framed) return child;
         final height = constraints.maxHeight.clamp(720, 932).toDouble();
         return ColoredBox(
