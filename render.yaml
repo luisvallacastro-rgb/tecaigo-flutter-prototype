@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: tecaigo-flutter-prototype
+    runtime: static
+    buildCommand: bash scripts/render_build_flutter.sh
+    staticPublishPath: build/web
+    envVars:
+      - key: SKIP_INSTALL_DEPS
+        value: "true"
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
