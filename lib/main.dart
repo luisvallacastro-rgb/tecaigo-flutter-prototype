@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -27,14 +29,29 @@ class DesktopPrototypeHost extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final framed = constraints.maxWidth >= 480;
+        final desktopWeb = kIsWeb &&
+            switch (defaultTargetPlatform) {
+              TargetPlatform.linux ||
+              TargetPlatform.macOS ||
+              TargetPlatform.windows =>
+                true,
+              _ => false,
+            };
+        final framed = desktopWeb || constraints.maxWidth >= 480;
         if (!framed) return child;
-        final height = constraints.maxHeight.clamp(720, 932).toDouble();
+        final availableWidth =
+            constraints.maxWidth.isFinite ? constraints.maxWidth : 430.0;
+        final availableHeight =
+            constraints.maxHeight.isFinite ? constraints.maxHeight : 932.0;
+        final width = availableWidth >= 480 ? 430.0 : availableWidth;
+        final height = availableHeight >= 720
+            ? math.min(availableHeight, 932.0)
+            : availableHeight;
         return ColoredBox(
           color: AppColors.canvasDeep,
           child: Center(
             child: SizedBox(
-              width: 430,
+              width: width,
               height: height,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(30),
