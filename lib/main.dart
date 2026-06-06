@@ -11047,6 +11047,8 @@ class EventBuilderScreen extends StatefulWidget {
 }
 
 class _EventBuilderScreenState extends State<EventBuilderScreen> {
+  static const _defaultHost = 'TeCaiGO Tours - El Salvador';
+
   int _capacity = 10;
   int _price = 6;
   int _cost = 5;
@@ -11063,7 +11065,7 @@ class _EventBuilderScreenState extends State<EventBuilderScreen> {
   bool _suppressDraftRefresh = false;
   String? _editingId;
   final _name = TextEditingController();
-  final _host = TextEditingController();
+  final _host = TextEditingController(text: _defaultHost);
   final _location = TextEditingController();
   final _date = TextEditingController();
   final _start = TextEditingController();
@@ -11171,8 +11173,7 @@ class _EventBuilderScreenState extends State<EventBuilderScreen> {
       id: _editingId ?? DateTime.now().microsecondsSinceEpoch.toString(),
       name: _name.text.trim().isEmpty ? 'Evento sin nombre' : _name.text.trim(),
       type: _type,
-      host:
-          _host.text.trim().isEmpty ? 'Anfitrion pendiente' : _host.text.trim(),
+      host: _host.text.trim().isEmpty ? _defaultHost : _host.text.trim(),
       location: _location.text.trim().isEmpty
           ? 'Ubicacion pendiente'
           : _location.text.trim(),
@@ -11228,7 +11229,7 @@ class _EventBuilderScreenState extends State<EventBuilderScreen> {
       _publicInventory = false;
       _updateDraftControllers(() {
         _name.clear();
-        _host.clear();
+        _host.text = _defaultHost;
         _location.clear();
         _date.clear();
         _start.clear();
