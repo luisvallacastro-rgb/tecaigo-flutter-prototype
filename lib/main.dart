@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'app_storage.dart';
+import 'tecaigo_api.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -631,6 +632,40 @@ class ClientShell extends StatefulWidget {
 class _ClientShellState extends State<ClientShell> {
   int _tab = 0;
   final List<ClientReservation> _reservations = [];
+  List<ClientEvent> _syncedEvents = const [];
+  bool _syncingEvents = false;
+  String _syncMessage = 'Conectando con TeCaiGO.EXE';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadExeEvents();
+  }
+
+  Future<void> _loadExeEvents() async {
+    setState(() {
+      _syncingEvents = true;
+      _syncMessage = 'Sincronizando eventos desde TeCaiGO.EXE';
+    });
+
+    try {
+      final events = await fetchExeEvents();
+      if (!mounted) return;
+      setState(() {
+        _syncedEvents = events.map(clientEventFromExe).toList();
+        _syncMessage = _syncedEvents.isEmpty
+            ? 'EXE conectado, sin eventos publicados nuevos'
+            : '${_syncedEvents.length} eventos sincronizados desde EXE';
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _syncMessage = 'Modo demo: EXE no disponible en este momento';
+      });
+    } finally {
+      if (mounted) setState(() => _syncingEvents = false);
+    }
+  }
 
   void _openEvent(ClientEvent event) {
     HapticFeedback.selectionClick();
@@ -676,6 +711,7 @@ class _ClientShellState extends State<ClientShell> {
             }
             _tab = 2;
           });
+          _sendReservationToExe(updated, purchaseMode: purchaseMode);
           Navigator.pop(context);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -779,7 +815,11 @@ class _ClientShellState extends State<ClientShell> {
           onEventOpened: _openEvent,
           onBusinessOpen: _openBusiness,
           onReserve: (event) => _editReservation(event: event),
-          onBuy: (event) => _editReservation(event: event, purchaseMode: true)),
+          onBuy: (event) => _editReservation(event: event, purchaseMode: true),
+          syncedEvents: _syncedEvents,
+          syncMessage: _syncMessage,
+          syncingEvents: _syncingEvents,
+          onSync: _loadExeEvents),
       ClientCommerceScreen(
         onBusinessOpen: _openBusiness,
         onPromotionBuy: _buyPromotion,
@@ -836,6 +876,31 @@ class _ClientShellState extends State<ClientShell> {
       ),
     );
   }
+
+  Future<void> _sendReservationToExe(ClientReservation reservation,
+      {required bool purchaseMode}) async {
+    final unit = int.tryParse(
+            reservation.event.price.replaceAll(RegExp(r'[^0-9]'), '')) ??
+        0;
+    final ok = await sendAppReservation({
+      'id': reservation.id,
+      'source': 'tecaigo-app',
+      'mode': purchaseMode ? 'Compra' : 'Reserva',
+      'status': reservation.status,
+      'eventTitle': reservation.event.title,
+      'eventLocation': reservation.event.location,
+      'selectedDate': reservation.selectedDate,
+      'guests': reservation.guests,
+      'contact': reservation.contact,
+      'note': reservation.note,
+      'unitPrice': unit,
+      'total': unit * reservation.guests,
+    });
+    if (!mounted || !ok) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Reserva enviada a TeCaiGO.EXE.')),
+    );
+  }
 }
 
 class ClientDiscoverScreen extends StatefulWidget {
@@ -845,12 +910,20 @@ class ClientDiscoverScreen extends StatefulWidget {
     required this.onBusinessOpen,
     required this.onReserve,
     required this.onBuy,
+    required this.syncedEvents,
+    required this.syncMessage,
+    required this.syncingEvents,
+    required this.onSync,
   });
 
   final ValueChanged<ClientEvent> onEventOpened;
   final ValueChanged<TouristBusiness> onBusinessOpen;
   final ValueChanged<ClientEvent> onReserve;
   final ValueChanged<ClientEvent> onBuy;
+  final List<ClientEvent> syncedEvents;
+  final String syncMessage;
+  final bool syncingEvents;
+  final VoidCallback onSync;
 
   @override
   State<ClientDiscoverScreen> createState() => _ClientDiscoverScreenState();
@@ -937,9 +1010,10 @@ class _ClientDiscoverScreenState extends State<ClientDiscoverScreen> {
   }
 
   List<Widget> _eventWidgets() {
+    final events = [...widget.syncedEvents, ...clientEvents];
     final visible = _normalizedQuery.isEmpty
-        ? clientEvents
-        : clientEvents
+        ? events
+        : events
             .where((event) =>
                 event.title.toLowerCase().contains(_normalizedQuery) ||
                 event.subtitle.toLowerCase().contains(_normalizedQuery) ||
@@ -947,6 +1021,14 @@ class _ClientDiscoverScreenState extends State<ClientDiscoverScreen> {
                 event.location.toLowerCase().contains(_normalizedQuery))
             .toList();
     return [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(18, 0, 18, 14),
+        child: ExeSyncStatusCard(
+          message: widget.syncMessage,
+          syncing: widget.syncingEvents,
+          onSync: widget.onSync,
+        ),
+      ),
       if (visible.isEmpty)
         const Padding(
           padding: EdgeInsets.fromLTRB(18, 0, 18, 14),
@@ -1091,6 +1173,68 @@ class _ClientDiscoverScreenState extends State<ClientDiscoverScreen> {
           ),
         ),
     ];
+  }
+}
+
+class ExeSyncStatusCard extends StatelessWidget {
+  const ExeSyncStatusCard({
+    super.key,
+    required this.message,
+    required this.syncing,
+    required this.onSync,
+  });
+
+  final String message;
+  final bool syncing;
+  final VoidCallback onSync;
+
+  @override
+  Widget build(BuildContext context) {
+    return PremiumSurface(
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        children: [
+          IconBadge(
+            icon: syncing ? Icons.sync_rounded : Icons.hub_outlined,
+            color: AppColors.mint,
+            small: true,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Conectado a TeCaiGO.EXE',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  message,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.58),
+                    fontSize: 12,
+                    height: 1.25,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Sincronizar',
+            onPressed: syncing ? null : onSync,
+            icon: syncing
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.refresh_rounded),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -16651,6 +16795,58 @@ class ClientEvent {
   final List<String> dateOptions;
   final String price;
   final Color color;
+}
+
+ClientEvent clientEventFromExe(Map<String, dynamic> event) {
+  final title = _apiText(event['title'], 'Evento TeCaiGO');
+  final route =
+      _apiText(event['route'], _apiText(event['location'], 'Ruta TeCaiGO'));
+  final host = _apiText(event['host'], 'Tour operador TeCaiGO');
+  final description = _apiText(
+    event['description'],
+    'Experiencia publicada desde el centro de operaciones TeCaiGO.EXE.',
+  );
+  final dates = _apiDateOptions(event['dates']);
+  final price = _apiNumber(event['price']);
+  final visibility =
+      _apiText(event['visibility'], _apiText(event['mode'], 'Publicado'));
+
+  return ClientEvent(
+    title: title,
+    subtitle: '$description Anfitrion: $host.',
+    category: route,
+    badge: visibility,
+    imageUrl: _apiText(event['image'], 'assets/turismo/ataco.jpeg'),
+    location: route,
+    date: dates.first,
+    dateOptions: dates,
+    price: price > 0 ? '\$${price.toStringAsFixed(0)}' : 'Consultar',
+    color: AppColors.mint,
+  );
+}
+
+String _apiText(Object? value, String fallback) {
+  final text = value?.toString().trim() ?? '';
+  return text.isEmpty ? fallback : text;
+}
+
+double _apiNumber(Object? value) {
+  if (value is num) return value.toDouble();
+  return double.tryParse(value?.toString() ?? '') ?? 0;
+}
+
+List<String> _apiDateOptions(Object? value) {
+  if (value is List) {
+    final dates = value
+        .map((date) {
+          if (date is Map) return date['date']?.toString().trim() ?? '';
+          return date.toString().trim();
+        })
+        .where((date) => date.isNotEmpty)
+        .toList();
+    if (dates.isNotEmpty) return dates;
+  }
+  return const ['Fecha por confirmar'];
 }
 
 class ClientReservation {
